@@ -1,0 +1,112 @@
+import java.io.*;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.Socket;
+import java.net.UnknownHostException;
+import java.sql.SQLOutput;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Scanner;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import static jdk.internal.net.http.common.Utils.close;
+
+public class ClientTcp extends Thread {
+    /* CLient TCP que ha endevinar un número pensat per SrvTcpAdivina.java */
+    Tablero tablero = new Tablero();
+    String hostname;
+    int port;
+    boolean continueConnected;
+    int intents;
+    Scanner sc = new Scanner(System.in);
+    private boolean[][] matriz;
+    private DatagramSocket clientSocket;
+
+    public ClientTcp(String hostname, int port) {
+        this.hostname = hostname;
+        this.port = port;
+        continueConnected = true;
+    }
+
+    public void run() {
+        //necesitamos una lista por eso es list integer
+        int serverData;
+        Socket socket;
+        ObjectInputStream in;
+        ObjectOutputStream out;
+        try {
+            socket = new Socket(InetAddress.getByName(hostname), port);
+            in = new ObjectInputStream(socket.getInputStream());
+            out = new ObjectOutputStream(socket.getOutputStream());
+            matriz= (boolean[][]) in.readObject();
+            //el client atén el port fins que decideix finalitzar
+            while(continueConnected){
+                tablero.mostrarTablero(matriz);
+                System.out.println("Dime Y");
+                int Y = sc.nextInt();
+                System.out.println("Dime X");
+                int X = sc.nextInt();
+
+                out.writeObject(matriz[Y][X]);
+                out.flush();
+
+                serverData = (int) in.readObject();
+                getRequest(Collections.singletonList(serverData));
+
+            }
+            close(socket);
+        } catch (UnknownHostException ex) {
+            System.out.println("Error de connexió. No existeix el host: " + ex.getMessage());
+        } catch (IOException ex) {
+            System.out.println("Error de connexió indefinit: " + ex.getMessage());
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void getRequest(List<Integer> serverData) {
+        System.out.println(serverData.toString());
+        continueConnected = false;
+    }
+
+    public boolean mustFinish(String dades) {
+        if (dades.equals("exit")) return false;
+        return true;
+
+    }
+
+    private void close(Socket socket){
+        //si falla el tancament no podem fer gaire cosa, només enregistrar
+        //el problema
+        try {
+            //tancament de tots els recursos
+            if(socket!=null && !socket.isClosed()){
+                if(!socket.isInputShutdown()){
+                    socket.shutdownInput();
+                }
+                if(!socket.isOutputShutdown()){
+                    socket.shutdownOutput();
+                }
+                socket.close();
+            }
+        } catch (IOException ex) {
+            //enregistrem l'error amb un objecte Logger
+            Logger.getLogger(ClientTcp.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    public static void main(String[] args) {
+		/*if (args.length != 2) {
+            System.err.println(
+                "Usage: java ClientTcpAdivina <host name> <port number>");
+            System.exit(1);
+        }*/
+
+        // String hostName = args[0];
+        // int portNumber = Integer.parseInt(args[1]);
+        ClientTcp clientTcp = new ClientTcp("localhost",5558);
+        clientTcp.start();
+    }
+}
